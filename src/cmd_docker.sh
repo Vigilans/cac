@@ -16,7 +16,7 @@ _docker_dir() {
     "$script_path/docker" \
     "$script_path/../docker" \
     "$PWD/docker" \
-    "$HOME/.cac/docker"
+    "$CAC_DIR/docker"
   do
     [[ -d "$d" && -f "$d/docker-compose.yml" ]] && { echo "$d"; return 0; }
   done

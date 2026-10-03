@@ -32,7 +32,7 @@ SOURCES=(
     echo '# 由 build.sh 从 src/ 构建，勿直接编辑本文件'
     echo 'set -euo pipefail'
     echo
-    echo 'CAC_DIR="$HOME/.cac"'
+    echo 'export CAC_DIR="${CAC_DIR:-$HOME/.cac}"'
     echo 'ENVS_DIR="$CAC_DIR/envs"'
     echo 'VERSIONS_DIR="$CAC_DIR/versions"'
     echo

@@ -22,15 +22,15 @@ _ensure_initialized() {
     # Warn if running as root — files written here become root-owned and break
     # normal-user invocations (wrapper has set -e and will silently exit).
     if [[ $EUID -eq 0 ]]; then
-        echo "[cac] warning: running as root may corrupt ~/.cac/ file ownership" >&2
+        echo "[cac] warning: running as root may corrupt $CAC_DIR file ownership" >&2
         echo "[cac] hint: run as your normal user instead" >&2
     fi
-    # rm -f first: user owns ~/.cac/ dir so can delete root-owned files even if can't overwrite them
-    if [[ -f "$_self_dir/fingerprint-hook.js" ]]; then
+    # Package resources may already be in place for a script installation.
+    if [[ -f "$_self_dir/fingerprint-hook.js" ]] && [[ ! "$_self_dir/fingerprint-hook.js" -ef "$CAC_DIR/fingerprint-hook.js" ]]; then
         rm -f "$CAC_DIR/fingerprint-hook.js" 2>/dev/null || true
         cp "$_self_dir/fingerprint-hook.js" "$CAC_DIR/fingerprint-hook.js" 2>/dev/null || true
     fi
-    if [[ -f "$_self_dir/relay.js" ]]; then
+    if [[ -f "$_self_dir/relay.js" ]] && [[ ! "$_self_dir/relay.js" -ef "$CAC_DIR/relay.js" ]]; then
         rm -f "$CAC_DIR/relay.js" 2>/dev/null || true
         cp "$_self_dir/relay.js" "$CAC_DIR/relay.js" 2>/dev/null || true
     fi
@@ -65,14 +65,11 @@ PYEOF
     # Keep .latest pointing to highest installed version
     _update_latest 2>/dev/null || true
 
-    # Re-generate wrapper on version upgrade
+    # Keep generated entry points and shims on the same version.
     if [[ -f "$CAC_DIR/bin/claude" ]]; then
         local _wrapper_ver
         _wrapper_ver=$(grep 'CAC_WRAPPER_VER=' "$CAC_DIR/bin/claude" 2>/dev/null | sed 's/.*CAC_WRAPPER_VER=//' | tr -d '[:space:]' || true)
-        if [[ "$_wrapper_ver" != "$CAC_VERSION" ]]; then
-            _write_wrapper
-        fi
-        return 0
+        [[ "$_wrapper_ver" == "$CAC_VERSION" ]] && return 0
     fi
 
     # Find real claude (system-installed or managed)
@@ -84,7 +81,7 @@ PYEOF
             real_claude="$VERSIONS_DIR/$latest_ver/claude"
         fi
     fi
-    if [[ -n "$real_claude" ]] && [[ -x "$real_claude" ]]; then
+    if [[ ! -s "$CAC_DIR/real_claude" ]] && [[ -n "$real_claude" ]] && [[ -x "$real_claude" ]]; then
         echo "$real_claude" > "$CAC_DIR/real_claude"
     fi
 

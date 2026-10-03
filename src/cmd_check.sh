@@ -18,7 +18,7 @@ cmd_check() {
     # Resolve version
     local ver; ver=$(_read "$env_dir/version" "")
     if [[ -z "$ver" ]] || [[ "$ver" == "system" ]]; then
-        local _real; _real=$(_read "$CAC_DIR/real_claude" "")
+        local _real; _real=$(tr -d '\r\n' < "$CAC_DIR/real_claude" 2>/dev/null || true)
         if [[ -n "$_real" ]] && [[ -x "$_real" ]]; then
             ver=$("$_real" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "?")
         else
@@ -99,7 +99,7 @@ cmd_check() {
     if [[ -f "$CAC_DIR/fingerprint-hook.js" ]] && [[ -f "$env_dir/hostname" ]]; then
         local expected_hn; expected_hn=$(_read "$env_dir/hostname")
         local actual_hn
-        actual_hn=$(NODE_OPTIONS="--require $CAC_DIR/fingerprint-hook.js" CAC_HOSTNAME="$expected_hn" \
+        actual_hn=$(NODE_OPTIONS="--require \"$CAC_DIR/fingerprint-hook.js\"" CAC_HOSTNAME="$expected_hn" \
             node -e "process.stdout.write(require('os').hostname())" 2>/dev/null || true)
         (( _id_total++ )) || true
         if [[ "$actual_hn" == "$expected_hn" ]]; then

@@ -1,6 +1,16 @@
 # ── cmd: delete (uninstall) ────────────────────────────────────────
 
 cmd_delete() {
+    local method
+    method=$(_install_method)
+    local launcher="$HOME/.local/bin/cac"
+    # Restrict recursive removal to an initialized cac data directory.
+    if [[ -d "$CAC_DIR" ]]; then
+        CAC_DIR=$(cd "$CAC_DIR" && pwd -P)
+        if [[ "$CAC_DIR" == / || "$CAC_DIR" == "$HOME" || ! -d "$CAC_DIR/envs" || ! -f "$CAC_DIR/bin/claude" ]]; then
+            _die "refusing to remove an unrecognized cac directory: $CAC_DIR"
+        fi
+    fi
     echo "=== cac delete ==="
     echo
 
@@ -23,17 +33,12 @@ cmd_delete() {
             echo "  ✓ stopped docker port-forward processes"
         fi
 
-        # fallback: clean up orphaned relay processes
-        pkill -f "node.*\.cac/relay\.js" 2>/dev/null || true
-
         rm -rf "$CAC_DIR"
         echo "  ✓ deleted $CAC_DIR"
     else
         echo "  - $CAC_DIR does not exist, skipping"
     fi
 
-    local method
-    method=$(_install_method)
     echo
     if [[ "$method" == "npm" ]]; then
         echo "  ✓ cleared all cac data and config"
@@ -41,7 +46,12 @@ cmd_delete() {
         echo "to fully uninstall the cac command, run:"
         echo "  npm uninstall -g claude-cac"
     else
-        if [[ -f "$HOME/bin/cac" ]]; then
+        if [[ -f "$launcher" ]] && grep -Fxq '# cac launcher' "$launcher" && \
+            grep -Fxq "export CAC_DIR=$(printf '%q' "$CAC_DIR")" "$launcher"; then
+            rm -f "$launcher"
+            echo "  ✓ deleted $launcher"
+        fi
+        if [[ "${BASH_SOURCE[0]}" == "$HOME/bin/cac" ]] && [[ -f "$HOME/bin/cac" ]]; then
             rm -f "$HOME/bin/cac"
             echo "  ✓ deleted $HOME/bin/cac"
         fi

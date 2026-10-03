@@ -149,7 +149,7 @@ _write_wrapper() {
 set -euo pipefail
 # CAC_WRAPPER_VER=__CAC_VER__
 
-CAC_DIR="$HOME/.cac"
+export CAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENVS_DIR="$CAC_DIR/envs"
 
 _command=""
@@ -185,13 +185,14 @@ if [[ -d "$_env_dir/.claude" ]]; then
     if [[ -f "$_env_dir/.claude/settings.override.json" ]]; then
         _src_settings=""
         if [[ -f "$_env_dir/clone_source" ]]; then
-            _src_settings="$(tr -d '[:space:]' < "$_env_dir/clone_source")/settings.json"
+            _src_settings="$(tr -d '\r\n' < "$_env_dir/clone_source")/settings.json"
         elif [[ -f "$HOME/.claude/settings.json" ]]; then
             _src_settings="$HOME/.claude/settings.json"
         fi
         if [[ -n "$_src_settings" ]] && [[ -f "$_src_settings" ]]; then
             # Skip merge if settings.json is newer than both inputs
-            if [[ "$_src_settings" -nt "$_env_dir/.claude/settings.json" ]] || \
+            if [[ "$_env_dir/clone_source" -nt "$_env_dir/.claude/settings.json" ]] || \
+               [[ "$_src_settings" -nt "$_env_dir/.claude/settings.json" ]] || \
                [[ "$_env_dir/.claude/settings.override.json" -nt "$_env_dir/.claude/settings.json" ]]; then
                 python3 -c "
 import json,sys
@@ -248,6 +249,8 @@ if [[ -n "$PROXY" ]]; then
     export NO_PROXY="localhost,127.0.0.1"
 fi
 export PATH="$CAC_DIR/shim-bin:$PATH"
+# BUN_OPTIONS accepts backslash-escaped paths.
+printf -v _bun_hooks '%q' "$CAC_DIR"
 
 # ── multi-layer telemetry protection ──
 # Modes: stealth (default) | paranoid | transparent
@@ -364,11 +367,11 @@ fi
 if [[ -r "$CAC_DIR/cac-dns-guard.js" ]]; then
     case "${NODE_OPTIONS:-}" in
         *cac-dns-guard.js*) ;; # already injected, skip
-        *) export NODE_OPTIONS="${NODE_OPTIONS:-} --require $CAC_DIR/cac-dns-guard.js" ;;
+        *) export NODE_OPTIONS="${NODE_OPTIONS:-} --require \"$CAC_DIR/cac-dns-guard.js\"" ;;
     esac
     case "${BUN_OPTIONS:-}" in
         *cac-dns-guard.js*) ;;
-        *) export BUN_OPTIONS="${BUN_OPTIONS:-} --preload $CAC_DIR/cac-dns-guard.js" ;;
+        *) export BUN_OPTIONS="${BUN_OPTIONS:-} --preload $_bun_hooks/cac-dns-guard.js" ;;
     esac
 fi
 # fallback layer: HOSTALIASES (gethostbyname level)
@@ -403,11 +406,11 @@ export USER="$CAC_USERNAME" LOGNAME="$CAC_USERNAME"
 if [[ -r "$CAC_DIR/fingerprint-hook.js" ]]; then
     case "${NODE_OPTIONS:-}" in
         *fingerprint-hook.js*) ;;
-        *) export NODE_OPTIONS="--require $CAC_DIR/fingerprint-hook.js ${NODE_OPTIONS:-}" ;;
+        *) export NODE_OPTIONS="--require \"$CAC_DIR/fingerprint-hook.js\" ${NODE_OPTIONS:-}" ;;
     esac
     case "${BUN_OPTIONS:-}" in
         *fingerprint-hook.js*) ;;
-        *) export BUN_OPTIONS="--preload $CAC_DIR/fingerprint-hook.js ${BUN_OPTIONS:-}" ;;
+        *) export BUN_OPTIONS="--preload $_bun_hooks/fingerprint-hook.js ${BUN_OPTIONS:-}" ;;
     esac
 fi
 
@@ -528,7 +531,7 @@ _claude_count=$(pgrep -x "claude" 2>/dev/null | wc -l | tr -d '[:space:]') || _c
 if [[ "$_claude_count" -gt "$_max_sessions" ]]; then
     echo "[cac] warning: $_claude_count claude sessions running (threshold: $_max_sessions)" >&2
     echo "[cac] hint: concurrent sessions on the same device may trigger detection" >&2
-    echo "[cac] hint: adjust threshold with: echo '{\"max_sessions\": 20}' > ~/.cac/settings.json" >&2
+    echo "[cac] hint: adjust max_sessions in $CAC_DIR/settings.json" >&2
 fi
 
 exec "$_real" "$@"
@@ -542,7 +545,7 @@ _write_ioreg_shim() {
     mkdir -p "$CAC_DIR/shim-bin"
     cat > "$CAC_DIR/shim-bin/ioreg" << 'IOREG_EOF'
 #!/usr/bin/env bash
-CAC_DIR="$HOME/.cac"
+CAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # non-target call: passthrough to real ioreg
 if ! echo "$*" | grep -q "IOPlatformExpertDevice"; then
@@ -580,7 +583,7 @@ _write_machine_id_shim() {
     mkdir -p "$CAC_DIR/shim-bin"
     cat > "$CAC_DIR/shim-bin/cat" << 'CAT_EOF'
 #!/usr/bin/env bash
-CAC_DIR="$HOME/.cac"
+CAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # get real cat path first (avoid recursive self-call)
 _real=$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$CAC_DIR/shim-bin" | tr '\n' ':') command -v cat 2>/dev/null || true)
@@ -604,7 +607,7 @@ _write_hostname_shim() {
     mkdir -p "$CAC_DIR/shim-bin"
     cat > "$CAC_DIR/shim-bin/hostname" << 'HOSTNAME_EOF'
 #!/usr/bin/env bash
-CAC_DIR="$HOME/.cac"
+CAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # read spoofed hostname
 _hn_file="$CAC_DIR/envs/$(tr -d '[:space:]' < "$CAC_DIR/current" 2>/dev/null)/hostname"
@@ -625,7 +628,7 @@ _write_ifconfig_shim() {
     mkdir -p "$CAC_DIR/shim-bin"
     cat > "$CAC_DIR/shim-bin/ifconfig" << 'IFCONFIG_EOF'
 #!/usr/bin/env bash
-CAC_DIR="$HOME/.cac"
+CAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 _real=$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$CAC_DIR/shim-bin" | tr '\n' ':') command -v ifconfig 2>/dev/null || true)
 

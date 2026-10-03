@@ -6,7 +6,7 @@ CAC_VERSION="1.5.7"
 _read()   { [[ -f "$1" ]] && tr -d '[:space:]' < "$1" || echo "${2:-}"; }
 _die()    { printf '%b\n' "$(_red "error:") $*" >&2; exit 1; }
 
-# Read a value from ~/.cac/settings.json
+# Read a value from the active installation's settings.json.
 # Usage: _cac_setting "key" "default"
 _cac_setting() {
     local key="$1" default="${2:-}"
@@ -409,17 +409,21 @@ _write_path_to_rc() {
     local rc_file="${1:-$(_detect_rc_file)}"
     if [[ -z "$rc_file" ]]; then
         echo "  $(_yellow '⚠') shell config file not found, please add PATH manually:"
-        echo '    export PATH="$HOME/bin:$PATH"'
-        echo '    export PATH="$HOME/.cac/bin:$PATH"'
+        printf '    export PATH=%q:"$HOME/.local/bin:$PATH"\n' "$CAC_DIR/bin"
         return 0
     fi
 
     mkdir -p "$(dirname "$rc_file")"
     [[ -f "$rc_file" ]] || touch "$rc_file"
 
-    if grep -q '# >>> cac >>>' "$rc_file" 2>/dev/null; then
-        echo "  ✓ PATH already exists in $rc_file, skipping"
-        return 0
+    local quoted_root
+    printf -v quoted_root '%q' "$CAC_DIR"
+    if grep -q '# >>> cac' "$rc_file" 2>/dev/null; then
+        if grep -Fq "$quoted_root" "$rc_file"; then
+            echo "  ✓ PATH already exists in $rc_file, skipping"
+            return 0
+        fi
+        _remove_path_from_rc "$rc_file"
     fi
 
     # Compat: remove old format if present
@@ -428,39 +432,41 @@ _write_path_to_rc() {
     fi
 
     if _is_fish_rc "$rc_file"; then
-        cat >> "$rc_file" << 'CACEOF'
-
-# >>> cac — Claude Code Cloak >>>
-fish_add_path --move --path "$HOME/.cac/bin" >/dev/null 2>&1
+        {
+            printf '\n# >>> cac — Claude Code Cloak >>>\nset -gx CAC_DIR %s\n' "$quoted_root"
+            cat << 'CACEOF'
+fish_add_path --move --path "$CAC_DIR/bin" "$HOME/.local/bin" >/dev/null 2>&1
 function cac
     command cac $argv
     set -l _rc $status
-    fish_add_path --move --path "$HOME/.cac/bin" >/dev/null 2>&1
+    fish_add_path --move --path "$CAC_DIR/bin" >/dev/null 2>&1
     return $_rc
 end
 # <<< cac — Claude Code Cloak <<<
 CACEOF
+        } >> "$rc_file"
         echo "  ✓ PATH written to $rc_file"
         return 0
     fi
 
-    cat >> "$rc_file" << 'CACEOF'
-
-# >>> cac — Claude Code Cloak >>>
-PATH=$(echo "$PATH" | tr ':' '\n' | grep -v '\.cac/bin' | tr '\n' ':' | sed 's/:$//')
-export PATH="$HOME/.cac/bin:$PATH"
+    {
+        printf '\n# >>> cac — Claude Code Cloak >>>\nexport CAC_DIR=%s\n' "$quoted_root"
+        cat << 'CACEOF'
+PATH=$(echo "$PATH" | tr ':' '\n' | grep -vF "$CAC_DIR/bin" | tr '\n' ':' | sed 's/:$//')
+export PATH="$CAC_DIR/bin:$HOME/.local/bin:$PATH"
 cac() {
     local _cac_bin
-    _cac_bin=$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -v '\.cac/bin' | tr '\n' ':') command -v cac 2>/dev/null)
+    _cac_bin=$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -vF "$CAC_DIR/bin" | tr '\n' ':') command -v cac 2>/dev/null)
     [[ -z "$_cac_bin" ]] && { echo "[cac] error: cac binary not found in PATH" >&2; return 1; }
     command "$_cac_bin" "$@"
     local _rc=$?
-    PATH=$(echo "$PATH" | tr ':' '\n' | grep -v '\.cac/bin' | tr '\n' ':' | sed 's/:$//')
-    export PATH="$HOME/.cac/bin:$PATH"
+    PATH=$(echo "$PATH" | tr ':' '\n' | grep -vF "$CAC_DIR/bin" | tr '\n' ':' | sed 's/:$//')
+    export PATH="$CAC_DIR/bin:$PATH"
     return $_rc
 }
 # <<< cac — Claude Code Cloak <<<
 CACEOF
+    } >> "$rc_file"
     echo "  ✓ PATH written to $rc_file"
     return 0
 }

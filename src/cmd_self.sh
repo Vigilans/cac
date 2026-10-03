@@ -15,18 +15,10 @@ _self_cmd_update() {
             ;;
         bash)
             echo "  Install method: $(_cyan "bash")"
-            local bin_dir="$HOME/bin"
-            mkdir -p "$bin_dir"
-            echo "  Downloading latest cac"
-            if curl -fL --progress-bar -o "$bin_dir/cac.tmp" "$_SELF_REPO/cac" 2>&1; then
-                chmod +x "$bin_dir/cac.tmp"
-                mv "$bin_dir/cac.tmp" "$bin_dir/cac"
-            else
-                rm -f "$bin_dir/cac.tmp"
-                _die "download failed"
-            fi
-            # Regenerate wrapper and shims from new binary
-            _ensure_initialized
+            (
+                set -o pipefail
+                curl -fsSL "$_SELF_REPO/install.sh" | CAC_DIR="$CAC_DIR" bash
+            ) || _die "update failed"
             ;;
         *)
             _die "unknown install method\n  Reinstall with: curl -fsSL $_SELF_REPO/install.sh | bash"

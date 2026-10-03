@@ -3,7 +3,7 @@
 # 由 build.sh 从 src/ 构建，勿直接编辑本文件
 set -euo pipefail
 
-CAC_DIR="$HOME/.cac"
+export CAC_DIR="${CAC_DIR:-$HOME/.cac}"
 ENVS_DIR="$CAC_DIR/envs"
 VERSIONS_DIR="$CAC_DIR/versions"
 
@@ -16,7 +16,7 @@ CAC_VERSION="1.5.7"
 _read()   { [[ -f "$1" ]] && tr -d '[:space:]' < "$1" || echo "${2:-}"; }
 _die()    { printf '%b\n' "$(_red "error:") $*" >&2; exit 1; }
 
-# Read a value from ~/.cac/settings.json
+# Read a value from the active installation's settings.json.
 # Usage: _cac_setting "key" "default"
 _cac_setting() {
     local key="$1" default="${2:-}"
@@ -419,17 +419,21 @@ _write_path_to_rc() {
     local rc_file="${1:-$(_detect_rc_file)}"
     if [[ -z "$rc_file" ]]; then
         echo "  $(_yellow '⚠') shell config file not found, please add PATH manually:"
-        echo '    export PATH="$HOME/bin:$PATH"'
-        echo '    export PATH="$HOME/.cac/bin:$PATH"'
+        printf '    export PATH=%q:"$HOME/.local/bin:$PATH"\n' "$CAC_DIR/bin"
         return 0
     fi
 
     mkdir -p "$(dirname "$rc_file")"
     [[ -f "$rc_file" ]] || touch "$rc_file"
 
-    if grep -q '# >>> cac >>>' "$rc_file" 2>/dev/null; then
-        echo "  ✓ PATH already exists in $rc_file, skipping"
-        return 0
+    local quoted_root
+    printf -v quoted_root '%q' "$CAC_DIR"
+    if grep -q '# >>> cac' "$rc_file" 2>/dev/null; then
+        if grep -Fq "$quoted_root" "$rc_file"; then
+            echo "  ✓ PATH already exists in $rc_file, skipping"
+            return 0
+        fi
+        _remove_path_from_rc "$rc_file"
     fi
 
     # Compat: remove old format if present
@@ -438,39 +442,41 @@ _write_path_to_rc() {
     fi
 
     if _is_fish_rc "$rc_file"; then
-        cat >> "$rc_file" << 'CACEOF'
-
-# >>> cac — Claude Code Cloak >>>
-fish_add_path --move --path "$HOME/.cac/bin" >/dev/null 2>&1
+        {
+            printf '\n# >>> cac — Claude Code Cloak >>>\nset -gx CAC_DIR %s\n' "$quoted_root"
+            cat << 'CACEOF'
+fish_add_path --move --path "$CAC_DIR/bin" "$HOME/.local/bin" >/dev/null 2>&1
 function cac
     command cac $argv
     set -l _rc $status
-    fish_add_path --move --path "$HOME/.cac/bin" >/dev/null 2>&1
+    fish_add_path --move --path "$CAC_DIR/bin" >/dev/null 2>&1
     return $_rc
 end
 # <<< cac — Claude Code Cloak <<<
 CACEOF
+        } >> "$rc_file"
         echo "  ✓ PATH written to $rc_file"
         return 0
     fi
 
-    cat >> "$rc_file" << 'CACEOF'
-
-# >>> cac — Claude Code Cloak >>>
-PATH=$(echo "$PATH" | tr ':' '\n' | grep -v '\.cac/bin' | tr '\n' ':' | sed 's/:$//')
-export PATH="$HOME/.cac/bin:$PATH"
+    {
+        printf '\n# >>> cac — Claude Code Cloak >>>\nexport CAC_DIR=%s\n' "$quoted_root"
+        cat << 'CACEOF'
+PATH=$(echo "$PATH" | tr ':' '\n' | grep -vF "$CAC_DIR/bin" | tr '\n' ':' | sed 's/:$//')
+export PATH="$CAC_DIR/bin:$HOME/.local/bin:$PATH"
 cac() {
     local _cac_bin
-    _cac_bin=$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -v '\.cac/bin' | tr '\n' ':') command -v cac 2>/dev/null)
+    _cac_bin=$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -vF "$CAC_DIR/bin" | tr '\n' ':') command -v cac 2>/dev/null)
     [[ -z "$_cac_bin" ]] && { echo "[cac] error: cac binary not found in PATH" >&2; return 1; }
     command "$_cac_bin" "$@"
     local _rc=$?
-    PATH=$(echo "$PATH" | tr ':' '\n' | grep -v '\.cac/bin' | tr '\n' ':' | sed 's/:$//')
-    export PATH="$HOME/.cac/bin:$PATH"
+    PATH=$(echo "$PATH" | tr ':' '\n' | grep -vF "$CAC_DIR/bin" | tr '\n' ':' | sed 's/:$//')
+    export PATH="$CAC_DIR/bin:$PATH"
     return $_rc
 }
 # <<< cac — Claude Code Cloak <<<
 CACEOF
+    } >> "$rc_file"
     echo "  ✓ PATH written to $rc_file"
     return 0
 }
@@ -1194,7 +1200,7 @@ _write_wrapper() {
 set -euo pipefail
 # CAC_WRAPPER_VER=__CAC_VER__
 
-CAC_DIR="$HOME/.cac"
+export CAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENVS_DIR="$CAC_DIR/envs"
 
 _command=""
@@ -1230,13 +1236,14 @@ if [[ -d "$_env_dir/.claude" ]]; then
     if [[ -f "$_env_dir/.claude/settings.override.json" ]]; then
         _src_settings=""
         if [[ -f "$_env_dir/clone_source" ]]; then
-            _src_settings="$(tr -d '[:space:]' < "$_env_dir/clone_source")/settings.json"
+            _src_settings="$(tr -d '\r\n' < "$_env_dir/clone_source")/settings.json"
         elif [[ -f "$HOME/.claude/settings.json" ]]; then
             _src_settings="$HOME/.claude/settings.json"
         fi
         if [[ -n "$_src_settings" ]] && [[ -f "$_src_settings" ]]; then
             # Skip merge if settings.json is newer than both inputs
-            if [[ "$_src_settings" -nt "$_env_dir/.claude/settings.json" ]] || \
+            if [[ "$_env_dir/clone_source" -nt "$_env_dir/.claude/settings.json" ]] || \
+               [[ "$_src_settings" -nt "$_env_dir/.claude/settings.json" ]] || \
                [[ "$_env_dir/.claude/settings.override.json" -nt "$_env_dir/.claude/settings.json" ]]; then
                 python3 -c "
 import json,sys
@@ -1293,6 +1300,8 @@ if [[ -n "$PROXY" ]]; then
     export NO_PROXY="localhost,127.0.0.1"
 fi
 export PATH="$CAC_DIR/shim-bin:$PATH"
+# BUN_OPTIONS accepts backslash-escaped paths.
+printf -v _bun_hooks '%q' "$CAC_DIR"
 
 # ── multi-layer telemetry protection ──
 # Modes: stealth (default) | paranoid | transparent
@@ -1409,11 +1418,11 @@ fi
 if [[ -r "$CAC_DIR/cac-dns-guard.js" ]]; then
     case "${NODE_OPTIONS:-}" in
         *cac-dns-guard.js*) ;; # already injected, skip
-        *) export NODE_OPTIONS="${NODE_OPTIONS:-} --require $CAC_DIR/cac-dns-guard.js" ;;
+        *) export NODE_OPTIONS="${NODE_OPTIONS:-} --require \"$CAC_DIR/cac-dns-guard.js\"" ;;
     esac
     case "${BUN_OPTIONS:-}" in
         *cac-dns-guard.js*) ;;
-        *) export BUN_OPTIONS="${BUN_OPTIONS:-} --preload $CAC_DIR/cac-dns-guard.js" ;;
+        *) export BUN_OPTIONS="${BUN_OPTIONS:-} --preload $_bun_hooks/cac-dns-guard.js" ;;
     esac
 fi
 # fallback layer: HOSTALIASES (gethostbyname level)
@@ -1448,11 +1457,11 @@ export USER="$CAC_USERNAME" LOGNAME="$CAC_USERNAME"
 if [[ -r "$CAC_DIR/fingerprint-hook.js" ]]; then
     case "${NODE_OPTIONS:-}" in
         *fingerprint-hook.js*) ;;
-        *) export NODE_OPTIONS="--require $CAC_DIR/fingerprint-hook.js ${NODE_OPTIONS:-}" ;;
+        *) export NODE_OPTIONS="--require \"$CAC_DIR/fingerprint-hook.js\" ${NODE_OPTIONS:-}" ;;
     esac
     case "${BUN_OPTIONS:-}" in
         *fingerprint-hook.js*) ;;
-        *) export BUN_OPTIONS="--preload $CAC_DIR/fingerprint-hook.js ${BUN_OPTIONS:-}" ;;
+        *) export BUN_OPTIONS="--preload $_bun_hooks/fingerprint-hook.js ${BUN_OPTIONS:-}" ;;
     esac
 fi
 
@@ -1573,7 +1582,7 @@ _claude_count=$(pgrep -x "claude" 2>/dev/null | wc -l | tr -d '[:space:]') || _c
 if [[ "$_claude_count" -gt "$_max_sessions" ]]; then
     echo "[cac] warning: $_claude_count claude sessions running (threshold: $_max_sessions)" >&2
     echo "[cac] hint: concurrent sessions on the same device may trigger detection" >&2
-    echo "[cac] hint: adjust threshold with: echo '{\"max_sessions\": 20}' > ~/.cac/settings.json" >&2
+    echo "[cac] hint: adjust max_sessions in $CAC_DIR/settings.json" >&2
 fi
 
 exec "$_real" "$@"
@@ -1587,7 +1596,7 @@ _write_ioreg_shim() {
     mkdir -p "$CAC_DIR/shim-bin"
     cat > "$CAC_DIR/shim-bin/ioreg" << 'IOREG_EOF'
 #!/usr/bin/env bash
-CAC_DIR="$HOME/.cac"
+CAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # non-target call: passthrough to real ioreg
 if ! echo "$*" | grep -q "IOPlatformExpertDevice"; then
@@ -1625,7 +1634,7 @@ _write_machine_id_shim() {
     mkdir -p "$CAC_DIR/shim-bin"
     cat > "$CAC_DIR/shim-bin/cat" << 'CAT_EOF'
 #!/usr/bin/env bash
-CAC_DIR="$HOME/.cac"
+CAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # get real cat path first (avoid recursive self-call)
 _real=$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$CAC_DIR/shim-bin" | tr '\n' ':') command -v cat 2>/dev/null || true)
@@ -1649,7 +1658,7 @@ _write_hostname_shim() {
     mkdir -p "$CAC_DIR/shim-bin"
     cat > "$CAC_DIR/shim-bin/hostname" << 'HOSTNAME_EOF'
 #!/usr/bin/env bash
-CAC_DIR="$HOME/.cac"
+CAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # read spoofed hostname
 _hn_file="$CAC_DIR/envs/$(tr -d '[:space:]' < "$CAC_DIR/current" 2>/dev/null)/hostname"
@@ -1670,7 +1679,7 @@ _write_ifconfig_shim() {
     mkdir -p "$CAC_DIR/shim-bin"
     cat > "$CAC_DIR/shim-bin/ifconfig" << 'IFCONFIG_EOF'
 #!/usr/bin/env bash
-CAC_DIR="$HOME/.cac"
+CAC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 _real=$(PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$CAC_DIR/shim-bin" | tr '\n' ':') command -v ifconfig 2>/dev/null || true)
 
@@ -1711,15 +1720,15 @@ _ensure_initialized() {
     # Warn if running as root — files written here become root-owned and break
     # normal-user invocations (wrapper has set -e and will silently exit).
     if [[ $EUID -eq 0 ]]; then
-        echo "[cac] warning: running as root may corrupt ~/.cac/ file ownership" >&2
+        echo "[cac] warning: running as root may corrupt $CAC_DIR file ownership" >&2
         echo "[cac] hint: run as your normal user instead" >&2
     fi
-    # rm -f first: user owns ~/.cac/ dir so can delete root-owned files even if can't overwrite them
-    if [[ -f "$_self_dir/fingerprint-hook.js" ]]; then
+    # Package resources may already be in place for a script installation.
+    if [[ -f "$_self_dir/fingerprint-hook.js" ]] && [[ ! "$_self_dir/fingerprint-hook.js" -ef "$CAC_DIR/fingerprint-hook.js" ]]; then
         rm -f "$CAC_DIR/fingerprint-hook.js" 2>/dev/null || true
         cp "$_self_dir/fingerprint-hook.js" "$CAC_DIR/fingerprint-hook.js" 2>/dev/null || true
     fi
-    if [[ -f "$_self_dir/relay.js" ]]; then
+    if [[ -f "$_self_dir/relay.js" ]] && [[ ! "$_self_dir/relay.js" -ef "$CAC_DIR/relay.js" ]]; then
         rm -f "$CAC_DIR/relay.js" 2>/dev/null || true
         cp "$_self_dir/relay.js" "$CAC_DIR/relay.js" 2>/dev/null || true
     fi
@@ -1754,14 +1763,11 @@ PYEOF
     # Keep .latest pointing to highest installed version
     _update_latest 2>/dev/null || true
 
-    # Re-generate wrapper on version upgrade
+    # Keep generated entry points and shims on the same version.
     if [[ -f "$CAC_DIR/bin/claude" ]]; then
         local _wrapper_ver
         _wrapper_ver=$(grep 'CAC_WRAPPER_VER=' "$CAC_DIR/bin/claude" 2>/dev/null | sed 's/.*CAC_WRAPPER_VER=//' | tr -d '[:space:]' || true)
-        if [[ "$_wrapper_ver" != "$CAC_VERSION" ]]; then
-            _write_wrapper
-        fi
-        return 0
+        [[ "$_wrapper_ver" == "$CAC_VERSION" ]] && return 0
     fi
 
     # Find real claude (system-installed or managed)
@@ -1773,7 +1779,7 @@ PYEOF
             real_claude="$VERSIONS_DIR/$latest_ver/claude"
         fi
     fi
-    if [[ -n "$real_claude" ]] && [[ -x "$real_claude" ]]; then
+    if [[ ! -s "$CAC_DIR/real_claude" ]] && [[ -n "$real_claude" ]] && [[ -x "$real_claude" ]]; then
         echo "$real_claude" > "$CAC_DIR/real_claude"
     fi
 
@@ -2258,7 +2264,7 @@ _relay_start() {
     [[ -z "$proxy" ]] && return 1
 
     local relay_js="$CAC_DIR/relay.js"
-    [[ -f "$relay_js" ]] || { echo "error: relay.js not found, reinstall with 'npm i -g claude-cac'" >&2; return 1; }
+    [[ -f "$relay_js" ]] || { echo "error: relay.js not found; run 'cac self update' to restore it" >&2; return 1; }
 
     # find available port (17890-17999)
     local port=17890
@@ -2492,7 +2498,7 @@ cmd_check() {
     # Resolve version
     local ver; ver=$(_read "$env_dir/version" "")
     if [[ -z "$ver" ]] || [[ "$ver" == "system" ]]; then
-        local _real; _real=$(_read "$CAC_DIR/real_claude" "")
+        local _real; _real=$(tr -d '\r\n' < "$CAC_DIR/real_claude" 2>/dev/null || true)
         if [[ -n "$_real" ]] && [[ -x "$_real" ]]; then
             ver=$("$_real" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "?")
         else
@@ -2573,7 +2579,7 @@ cmd_check() {
     if [[ -f "$CAC_DIR/fingerprint-hook.js" ]] && [[ -f "$env_dir/hostname" ]]; then
         local expected_hn; expected_hn=$(_read "$env_dir/hostname")
         local actual_hn
-        actual_hn=$(NODE_OPTIONS="--require $CAC_DIR/fingerprint-hook.js" CAC_HOSTNAME="$expected_hn" \
+        actual_hn=$(NODE_OPTIONS="--require \"$CAC_DIR/fingerprint-hook.js\"" CAC_HOSTNAME="$expected_hn" \
             node -e "process.stdout.write(require('os').hostname())" 2>/dev/null || true)
         (( _id_total++ )) || true
         if [[ "$actual_hn" == "$expected_hn" ]]; then
@@ -3000,18 +3006,10 @@ _self_cmd_update() {
             ;;
         bash)
             echo "  Install method: $(_cyan "bash")"
-            local bin_dir="$HOME/bin"
-            mkdir -p "$bin_dir"
-            echo "  Downloading latest cac"
-            if curl -fL --progress-bar -o "$bin_dir/cac.tmp" "$_SELF_REPO/cac" 2>&1; then
-                chmod +x "$bin_dir/cac.tmp"
-                mv "$bin_dir/cac.tmp" "$bin_dir/cac"
-            else
-                rm -f "$bin_dir/cac.tmp"
-                _die "download failed"
-            fi
-            # Regenerate wrapper and shims from new binary
-            _ensure_initialized
+            (
+                set -o pipefail
+                curl -fsSL "$_SELF_REPO/install.sh" | CAC_DIR="$CAC_DIR" bash
+            ) || _die "update failed"
             ;;
         *)
             _die "unknown install method\n  Reinstall with: curl -fsSL $_SELF_REPO/install.sh | bash"
@@ -3055,7 +3053,7 @@ _docker_dir() {
     "$script_path/docker" \
     "$script_path/../docker" \
     "$PWD/docker" \
-    "$HOME/.cac/docker"
+    "$CAC_DIR/docker"
   do
     [[ -d "$d" && -f "$d/docker-compose.yml" ]] && { echo "$d"; return 0; }
   done
@@ -3557,6 +3555,16 @@ cmd_docker() {
 # ── cmd: delete (uninstall) ────────────────────────────────────────
 
 cmd_delete() {
+    local method
+    method=$(_install_method)
+    local launcher="$HOME/.local/bin/cac"
+    # Restrict recursive removal to an initialized cac data directory.
+    if [[ -d "$CAC_DIR" ]]; then
+        CAC_DIR=$(cd "$CAC_DIR" && pwd -P)
+        if [[ "$CAC_DIR" == / || "$CAC_DIR" == "$HOME" || ! -d "$CAC_DIR/envs" || ! -f "$CAC_DIR/bin/claude" ]]; then
+            _die "refusing to remove an unrecognized cac directory: $CAC_DIR"
+        fi
+    fi
     echo "=== cac delete ==="
     echo
 
@@ -3579,17 +3587,12 @@ cmd_delete() {
             echo "  ✓ stopped docker port-forward processes"
         fi
 
-        # fallback: clean up orphaned relay processes
-        pkill -f "node.*\.cac/relay\.js" 2>/dev/null || true
-
         rm -rf "$CAC_DIR"
         echo "  ✓ deleted $CAC_DIR"
     else
         echo "  - $CAC_DIR does not exist, skipping"
     fi
 
-    local method
-    method=$(_install_method)
     echo
     if [[ "$method" == "npm" ]]; then
         echo "  ✓ cleared all cac data and config"
@@ -3597,7 +3600,12 @@ cmd_delete() {
         echo "to fully uninstall the cac command, run:"
         echo "  npm uninstall -g claude-cac"
     else
-        if [[ -f "$HOME/bin/cac" ]]; then
+        if [[ -f "$launcher" ]] && grep -Fxq '# cac launcher' "$launcher" && \
+            grep -Fxq "export CAC_DIR=$(printf '%q' "$CAC_DIR")" "$launcher"; then
+            rm -f "$launcher"
+            echo "  ✓ deleted $launcher"
+        fi
+        if [[ "${BASH_SOURCE[0]}" == "$HOME/bin/cac" ]] && [[ -f "$HOME/bin/cac" ]]; then
             rm -f "$HOME/bin/cac"
             echo "  ✓ deleted $HOME/bin/cac"
         fi

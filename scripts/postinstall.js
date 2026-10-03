@@ -5,7 +5,7 @@ var fs = require('fs');
 var pkgDir = path.join(__dirname, '..');
 var cacBin = path.join(pkgDir, 'cac');
 var home = process.env.HOME || process.env.USERPROFILE || '';
-var cacDir = path.join(home, '.cac');
+var cacDir = process.env.CAC_DIR || path.join(home, '.cac');
 
 // Ensure cac is executable
 try { fs.chmodSync(cacBin, 0o755); } catch (e) {}
@@ -28,7 +28,7 @@ try {
 }
 
 // Patch existing wrapper for known bugs — pure Node.js, no shell execution needed.
-// Users who upgrade via npm install keep their old ~/.cac/bin/claude until _ensure_initialized
+// Users who upgrade via npm install keep the existing wrapper until _ensure_initialized
 // runs (triggered by any cac command). This patch fixes critical bugs immediately.
 var wrapperPath = path.join(cacDir, 'bin', 'claude');
 if (home && fs.existsSync(wrapperPath)) {
