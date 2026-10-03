@@ -1,6 +1,6 @@
 # ── cmd: self (cac self-management, like "uv self") ──────────────
 
-_SELF_REPO="https://raw.githubusercontent.com/nmhjklnm/cac/master"
+_SELF_REPO="https://raw.githubusercontent.com/Vigilans/cac/dev"
 
 _self_cmd_update() {
     local method; method=$(_install_method)
@@ -11,7 +11,7 @@ _self_cmd_update() {
     case "$method" in
         npm)
             echo "  Install method: $(_cyan "npm")"
-            npm update -g claude-cac 2>&1 || _die "npm update failed"
+            npm install -g 'git+https://github.com/Vigilans/cac.git#dev' 2>&1 || _die "npm update failed"
             ;;
         bash)
             echo "  Install method: $(_cyan "bash")"

@@ -11,7 +11,7 @@ VERSIONS_DIR="$CAC_DIR/versions"
 # ── utils: colors, read/write, UUID, proxy parsing ───────────────────────
 
 # shellcheck disable=SC2034  # used in build-concatenated cac script
-CAC_VERSION="1.5.7"
+CAC_VERSION="1.5.7-vigilans.2"
 
 _read()   { [[ -f "$1" ]] && tr -d '[:space:]' < "$1" || echo "${2:-}"; }
 _die()    { printf '%b\n' "$(_red "error:") $*" >&2; exit 1; }
@@ -2991,7 +2991,7 @@ cmd_claude() {
 # ━━━ cmd_self.sh ━━━
 # ── cmd: self (cac self-management, like "uv self") ──────────────
 
-_SELF_REPO="https://raw.githubusercontent.com/nmhjklnm/cac/master"
+_SELF_REPO="https://raw.githubusercontent.com/Vigilans/cac/dev"
 
 _self_cmd_update() {
     local method; method=$(_install_method)
@@ -3002,7 +3002,7 @@ _self_cmd_update() {
     case "$method" in
         npm)
             echo "  Install method: $(_cyan "npm")"
-            npm update -g claude-cac 2>&1 || _die "npm update failed"
+            npm install -g 'git+https://github.com/Vigilans/cac.git#dev' 2>&1 || _die "npm update failed"
             ;;
         bash)
             echo "  Install method: $(_cyan "bash")"

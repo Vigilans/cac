@@ -57,10 +57,10 @@
 
 ```bash
 # npm（推荐）
-npm install -g claude-cac
+npm install -g 'git+https://github.com/Vigilans/cac.git#dev'
 
 # 或手动安装
-curl -fsSL https://raw.githubusercontent.com/nmhjklnm/cac/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Vigilans/cac/dev/install.sh | bash
 ```
 
 ### 快速上手
@@ -242,10 +242,10 @@ cac docker port 6287 # 端口转发
 
 ```bash
 # npm (recommended)
-npm install -g claude-cac
+npm install -g 'git+https://github.com/Vigilans/cac.git#dev'
 
 # or manual
-curl -fsSL https://raw.githubusercontent.com/nmhjklnm/cac/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Vigilans/cac/dev/install.sh | bash
 ```
 
 ### Quick start

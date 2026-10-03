@@ -2,7 +2,7 @@
 # install.sh — cac 一键安装脚本
 set -euo pipefail
 
-REPO="https://raw.githubusercontent.com/nmhjklnm/cac/master"
+REPO="https://raw.githubusercontent.com/Vigilans/cac/dev"
 CAC_DIR="${CAC_DIR:-$HOME/.cac}"
 BIN_DIR="$HOME/.local/bin"
 
