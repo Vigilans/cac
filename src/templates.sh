@@ -402,6 +402,7 @@ fi
 [[ -f "$_env_dir/mac_address" ]] && export CAC_MAC=$(tr -d '[:space:]' < "$_env_dir/mac_address")
 [[ -f "$_env_dir/machine_id" ]]  && export CAC_MACHINE_ID=$(tr -d '[:space:]' < "$_env_dir/machine_id")
 export CAC_USERNAME="user-$(echo "$_name" | cut -c1-8)"
+[[ -f "$_env_dir/username" ]] && export CAC_USERNAME=$(tr -d '[:space:]' < "$_env_dir/username")
 export USER="$CAC_USERNAME" LOGNAME="$CAC_USERNAME"
 if [[ -r "$CAC_DIR/fingerprint-hook.js" ]]; then
     case "${NODE_OPTIONS:-}" in

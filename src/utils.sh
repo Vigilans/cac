@@ -1,7 +1,7 @@
 # ── utils: colors, read/write, UUID, proxy parsing ───────────────────────
 
 # shellcheck disable=SC2034  # used in build-concatenated cac script
-CAC_VERSION="1.5.7-vigilans.2"
+CAC_VERSION="1.5.7-vigilans.3"
 
 _read()   { [[ -f "$1" ]] && tr -d '[:space:]' < "$1" || echo "${2:-}"; }
 _die()    { printf '%b\n' "$(_red "error:") $*" >&2; exit 1; }
@@ -71,7 +71,7 @@ _new_hostname() {
         "Liam" "Noah" "Oliver" "Elijah" "Lucas" "Mason" "Ethan" "Aiden"
         "Alex" "Ryan" "Tyler" "Jordan" "Taylor" "Morgan" "Casey" "Riley"
     )
-    local _name="${_first_names[$((RANDOM % ${#_first_names[@]}))]}"
+    local _name="${1:-${_first_names[$((RANDOM % ${#_first_names[@]}))]}}"
     local _platform; _platform=$(_detect_hostname_platform)
     case "$_platform" in
         macos)
@@ -92,8 +92,8 @@ _new_hostname() {
     esac
 }
 _new_mac() { printf '02:%02x:%02x:%02x:%02x:%02x' $((RANDOM%256)) $((RANDOM%256)) $((RANDOM%256)) $((RANDOM%256)) $((RANDOM%256)); }
-_new_git_remote() { echo "https://github.com/user-$(_gen_uuid | cut -d- -f1)/project-$(_gen_uuid | cut -d- -f2).git"; }
-_new_git_email() { echo "user-$(_gen_uuid | cut -d- -f1 | tr '[:upper:]' '[:lower:]')@users.noreply.github.com"; }
+_new_git_remote() { echo "https://github.com/${1:-user-$(_gen_uuid | cut -d- -f1)}/project-$(_gen_uuid | cut -d- -f2).git"; }
+_new_git_email() { echo "${1:-user-$(_gen_uuid | cut -d- -f1 | tr '[:upper:]' '[:lower:]')}@users.noreply.github.com"; }
 _new_device_token() { _new_user_id; }
 
 # Get real command path (bypass shim)

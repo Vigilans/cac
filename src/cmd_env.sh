@@ -308,7 +308,7 @@ _env_cmd_set() {
     # Parse: cac env set [name] <key> <value|--remove>
     # If first arg is a known key, use current env; otherwise treat as env name
     local name="" key="" value="" remove=false
-    local known_keys="proxy version telemetry persona"
+    local known_keys="proxy version telemetry persona username"
 
     if [[ $# -lt 1 ]] || [[ "${1:-}" == "-h" ]] || [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "help" ]]; then
         echo
@@ -317,6 +317,7 @@ _env_cmd_set() {
         echo "    $(_green "set") [name] proxy <url>                       Set proxy"
         echo "    $(_green "set") [name] proxy --remove                  Remove proxy"
         echo "    $(_green "set") [name] version <ver|latest>            Change Claude version"
+        echo "    $(_green "set") [name] username <name>                 Set username and derive hostname, remote and default email"
         echo "    $(_green "set") [name] telemetry <stealth|paranoid|transparent>"
         echo "                                                          Telemetry blocking: stealth (1p_events only), paranoid (max), transparent (none)"
         echo "    $(_green "set") [name] persona <macos-vscode|macos-cursor|macos-iterm|linux-desktop|--remove>"
@@ -338,7 +339,7 @@ _env_cmd_set() {
     _require_env "$name"
     local env_dir="$ENVS_DIR/$name"
 
-    [[ $# -ge 1 ]] || _die "usage: cac env set [name] <proxy|version|bypass> <value|--remove>"
+    [[ $# -ge 1 ]] || _die "usage: cac env set [name] <proxy|version|telemetry|persona|username> <value|--remove>"
     key="$1"; shift
 
     # Parse value or --remove
@@ -378,6 +379,25 @@ _env_cmd_set() {
             echo "$ver" > "$env_dir/version"
             echo "$(_green_bold "Set") version for $(_bold "$name") → $(_cyan "$ver")"
             ;;
+        username)
+            [[ -n "$value" ]] || _die "usage: cac env set [name] username <name>"
+            local old_username old_email
+            old_username=$(_read "$env_dir/username")
+            if [[ "$value" != "$old_username" ]]; then
+                old_email=$(_read "$env_dir/git_email")
+                if [[ "$(_detect_hostname_platform)" != "windows" ]]; then
+                    echo "$(_new_hostname "$value")" > "$env_dir/hostname"
+                fi
+                echo "$(_new_git_remote "$value")" > "$env_dir/fake_git_remote"
+                # Keep explicit email values when the username changes.
+                if [[ "$old_email" == "$old_username@users.noreply.github.com" ]] ||
+                   [[ -z "$old_username" && "$old_email" =~ ^user-[0-9a-f]{8}@users\.noreply\.github\.com$ ]]; then
+                    echo "$(_new_git_email "$value")" > "$env_dir/git_email"
+                fi
+                printf '%s\n' "$value" > "$env_dir/username"
+            fi
+            echo "$(_green_bold "Set") username for $(_bold "$name") → $(_cyan "$value")"
+            ;;
         telemetry)
             [[ "$remove" != "true" ]] || _die "cannot remove telemetry mode"
             [[ -n "$value" ]] || _die "usage: cac env set [name] telemetry <stealth|paranoid|transparent>"
@@ -403,7 +423,7 @@ _env_cmd_set() {
             fi
             ;;
         *)
-            _die "unknown key '$key' — use proxy, version, telemetry, or persona"
+            _die "unknown key '$key' — use proxy, version, telemetry, persona, or username"
             ;;
     esac
 }
@@ -433,7 +453,7 @@ cmd_env() {
             echo "                             Create isolated environment (auto-activates)"
             echo "                             --clone inherits commands/hooks/skills/plugins; --no-link copies instead of symlink"
             echo "    $(_green "set") [name] <key> <value>        Modify environment"
-            echo "                             proxy, version, telemetry, or persona"
+            echo "                             proxy, version, telemetry, persona, or username"
             echo "    $(_green "ls")              List all environments"
             echo "    $(_green "rm") <name>       Remove an environment"
             echo "    $(_green "check")           Verify current environment"
