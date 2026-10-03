@@ -6,12 +6,13 @@ cmd_help() {
     echo
 
     echo "  $(_bold "Environment")"
-    echo "    $(_green "cac env create") <name> [-p proxy] [-c ver] [--clone [source]] [--no-link]"
+    echo "    $(_green "cac env create") <name> [-p proxy] [-c ver | --no-install] [--clone [source]] [--no-link]"
     echo "    $(_green "cac env set") [name] <key> <value>   Modify environment"
     echo "    $(_green "cac env ls")                  List all environments"
     echo "    $(_green "cac env rm") <name>           Remove an environment"
     echo "    $(_green "cac env check")               Verify current environment"
     echo "    $(_green "cac") <name>                  Switch environment"
+    echo "    $(_green "cac run") -- <program> [args]   Run an external runtime in the current environment"
     echo
 
     echo "  $(_bold "Version")"

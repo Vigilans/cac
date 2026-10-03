@@ -152,9 +152,17 @@ set -euo pipefail
 CAC_DIR="$HOME/.cac"
 ENVS_DIR="$CAC_DIR/envs"
 
+_command=""
+if [[ "${1:-}" == "--cac-run" ]]; then
+    shift
+    _command="$1"
+    shift
+fi
+
 # cacstop state: passthrough directly
 if [[ -f "$CAC_DIR/stopped" ]]; then
-    _real=$(tr -d '[:space:]' < "$CAC_DIR/real_claude" 2>/dev/null || true)
+    _real="$_command"
+    [[ -n "$_real" ]] || _real=$(tr -d '\r\n' < "$CAC_DIR/real_claude" 2>/dev/null || true)
     [[ -x "$_real" ]] && exec "$_real" "$@"
     echo "[cac] error: real claude not found, reinstall with 'npm i -g claude-cac'" >&2; exit 1
 fi
@@ -168,6 +176,7 @@ _env_dir="$ENVS_DIR/$_name"
 [[ -d "$_env_dir" ]] || { echo "[cac] error: environment '$_name' not found" >&2; exit 1; }
 
 # Isolated .claude config directory
+[[ -d "$_env_dir/.claude" ]] || { echo "[cac] error: environment '$_name' has no .claude directory" >&2; exit 1; }
 if [[ -d "$_env_dir/.claude" ]]; then
     export CLAUDE_CONFIG_DIR="$_env_dir/.claude"
     # ensure settings.json exists, prevent Claude Code fallback to ~/.claude/settings.json
@@ -403,14 +412,14 @@ if [[ -r "$CAC_DIR/fingerprint-hook.js" ]]; then
 fi
 
 # exec real claude — versioned binary or system fallback
-_real=""
-if [[ -f "$_env_dir/version" ]]; then
+_real="$_command"
+if [[ -z "$_real" ]] && [[ -f "$_env_dir/version" ]]; then
     _ver=$(tr -d '[:space:]' < "$_env_dir/version")
     _ver_bin="$CAC_DIR/versions/$_ver/claude"
     [[ -x "$_ver_bin" ]] && _real="$_ver_bin"
 fi
 if [[ -z "$_real" ]] || [[ ! -x "$_real" ]]; then
-    _real=$(tr -d '[:space:]' < "$CAC_DIR/real_claude")
+    _real=$(tr -d '\r\n' < "$CAC_DIR/real_claude")
 fi
 [[ -x "$_real" ]] || { echo "[cac] error: claude not found, run 'cac claude install latest'" >&2; exit 1; }
 
@@ -522,13 +531,7 @@ if [[ "$_claude_count" -gt "$_max_sessions" ]]; then
     echo "[cac] hint: adjust threshold with: echo '{\"max_sessions\": 20}' > ~/.cac/settings.json" >&2
 fi
 
-# claude non-zero exit must not leave _ec unset (set -u) or abort before cleanup (set -e)
-_ec=0
-set +e
-"$_real" "$@"
-_ec=$?
-set -e
-exit "$_ec"
+exec "$_real" "$@"
 WRAPPER_EOF
     local _tmp="$CAC_DIR/bin/claude.tmp"
     sed "s/__CAC_VER__/$CAC_VERSION/" "$CAC_DIR/bin/claude" > "$_tmp" && mv "$_tmp" "$CAC_DIR/bin/claude"

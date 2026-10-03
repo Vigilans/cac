@@ -1,9 +1,21 @@
 # ── entry: dispatch commands ──────────────────────────────────────────────
 
+cmd_run() {
+    [[ "${1:-}" == "--" ]] && shift
+    [[ $# -gt 0 ]] || _die "usage: cac run -- <program> [args...]"
+    local program
+    program=$(command -v "$1") || _die "program not found: $1"
+    [[ -x "$program" ]] || _die "not an executable: $1"
+    shift
+    _require_setup
+    exec "$CAC_DIR/bin/claude" --cac-run "$program" "$@"
+}
+
 [[ $# -eq 0 ]] && { cmd_help; exit 0; }
 
 case "$1" in
     env)                cmd_env    "${@:2}" ;;
+    run)                cmd_run    "${@:2}" ;;
     claude)             cmd_claude "${@:2}" ;;
     self)               cmd_self   "${@:2}" ;;
     docker)             cmd_docker "${@:2}" ;;

@@ -2,7 +2,7 @@
 
 _env_cmd_create() {
     _require_setup
-    local name="" proxy="" claude_ver="" env_type="local" telemetry_mode="" clone_source="" clone_link=true persona=""
+    local name="" proxy="" claude_ver="" env_type="local" telemetry_mode="" clone_source="" clone_link=true persona="" no_install=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -21,6 +21,7 @@ _env_cmd_create() {
                          [[ "$persona" =~ ^(macos-vscode|macos-cursor|macos-iterm|linux-desktop)$ ]] || _die "invalid persona '$persona' (use macos-vscode, macos-cursor, macos-iterm, or linux-desktop)" ;;
             --clone)     shift; if [[ -n "${1:-}" ]] && [[ "${1:-}" != -* ]]; then clone_source="$1"; shift; else clone_source="host"; fi ;;
             --no-link)   clone_link=false; shift ;;
+            --no-install) no_install=true; shift ;;
             -*)          _die "unknown option: $1" ;;
             *)           [[ -z "$name" ]] && name="$1" || _die "extra argument: $1"; shift ;;
         esac
@@ -36,8 +37,12 @@ _env_cmd_create() {
 
     # Auto-install version (just-in-time, like uv)
     # No version specified → use latest
-    [[ -z "$claude_ver" ]] && claude_ver="latest"
-    claude_ver=$(_ensure_version_installed "$claude_ver") || exit 1
+    if [[ "$no_install" == "true" ]]; then
+        [[ -z "$claude_ver" ]] || _die "--no-install cannot be combined with --claude"
+    else
+        [[ -z "$claude_ver" ]] && claude_ver="latest"
+        claude_ver=$(_ensure_version_installed "$claude_ver") || exit 1
+    fi
 
     # Auto-detect proxy protocol
     local proxy_url=""
