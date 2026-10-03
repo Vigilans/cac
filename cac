@@ -23,7 +23,7 @@ _cac_setting() {
     local settings="$CAC_DIR/settings.json"
     [[ -f "$settings" ]] || { echo "$default"; return; }
     local val
-    val=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get(sys.argv[2],''))" "$settings" "$key" 2>/dev/null || true)
+    val=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8-sig')); v=d.get(sys.argv[2],''); print(json.dumps(v) if isinstance(v,bool) else v)" "$settings" "$key" 2>/dev/null || true)
     val="${val:-$default}"
     # Sync hot-path keys as plain files (avoids python3 spawn in wrapper)
     [[ "$key" == "max_sessions" ]] && echo "$val" > "$CAC_DIR/max_sessions"
@@ -415,6 +415,7 @@ _install_method() {
 }
 
 _write_path_to_rc() {
+    [[ "$(_cac_setting shell_integration true)" == "false" ]] && return 0
     local rc_file="${1:-$(_detect_rc_file)}"
     if [[ -z "$rc_file" ]]; then
         echo "  $(_yellow '⚠') shell config file not found, please add PATH manually:"
@@ -475,6 +476,7 @@ CACEOF
 }
 
 _remove_path_from_rc() {
+    [[ "$(_cac_setting shell_integration true)" == "false" ]] && return 0
     local rc_file="${1:-$(_detect_rc_file)}"
     [[ -z "$rc_file" ]] && return 0
 
@@ -2507,7 +2509,9 @@ cmd_check() {
 
     # ── wrapper check (instant) ──
     local claude_path; claude_path="$(command -v claude 2>/dev/null || true)"
-    if [[ -z "$claude_path" ]] || [[ "$claude_path" != *"/.cac/bin/claude" ]]; then
+    if [[ "$(_cac_setting shell_integration true)" == "false" ]]; then
+        echo "    $(_dim "○") wrapper    externally managed (cac run)"
+    elif [[ -z "$claude_path" ]] || [[ "$claude_path" != "$CAC_DIR/bin/claude" ]]; then
         local _rc; _rc=$(_detect_rc_file)
         if [[ -n "$_rc" ]] && grep -q '# >>> cac' "$_rc" 2>/dev/null; then
             echo "    $(_green "✓") wrapper    configured in ${_rc/#$HOME/~}"

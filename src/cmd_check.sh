@@ -35,7 +35,9 @@ cmd_check() {
 
     # ── wrapper check (instant) ──
     local claude_path; claude_path="$(command -v claude 2>/dev/null || true)"
-    if [[ -z "$claude_path" ]] || [[ "$claude_path" != *"/.cac/bin/claude" ]]; then
+    if [[ "$(_cac_setting shell_integration true)" == "false" ]]; then
+        echo "    $(_dim "○") wrapper    externally managed (cac run)"
+    elif [[ -z "$claude_path" ]] || [[ "$claude_path" != "$CAC_DIR/bin/claude" ]]; then
         local _rc; _rc=$(_detect_rc_file)
         if [[ -n "$_rc" ]] && grep -q '# >>> cac' "$_rc" 2>/dev/null; then
             echo "    $(_green "✓") wrapper    configured in ${_rc/#$HOME/~}"

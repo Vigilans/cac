@@ -13,7 +13,7 @@ _cac_setting() {
     local settings="$CAC_DIR/settings.json"
     [[ -f "$settings" ]] || { echo "$default"; return; }
     local val
-    val=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get(sys.argv[2],''))" "$settings" "$key" 2>/dev/null || true)
+    val=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8-sig')); v=d.get(sys.argv[2],''); print(json.dumps(v) if isinstance(v,bool) else v)" "$settings" "$key" 2>/dev/null || true)
     val="${val:-$default}"
     # Sync hot-path keys as plain files (avoids python3 spawn in wrapper)
     [[ "$key" == "max_sessions" ]] && echo "$val" > "$CAC_DIR/max_sessions"
@@ -405,6 +405,7 @@ _install_method() {
 }
 
 _write_path_to_rc() {
+    [[ "$(_cac_setting shell_integration true)" == "false" ]] && return 0
     local rc_file="${1:-$(_detect_rc_file)}"
     if [[ -z "$rc_file" ]]; then
         echo "  $(_yellow '⚠') shell config file not found, please add PATH manually:"
@@ -465,6 +466,7 @@ CACEOF
 }
 
 _remove_path_from_rc() {
+    [[ "$(_cac_setting shell_integration true)" == "false" ]] && return 0
     local rc_file="${1:-$(_detect_rc_file)}"
     [[ -z "$rc_file" ]] && return 0
 
