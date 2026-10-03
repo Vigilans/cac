@@ -2598,9 +2598,8 @@ cmd_check() {
     fi
     # user_id tracking: sync from .claude.json after login (real userID wins)
     local _uid_ok=true
-    local _config_dir="${CLAUDE_CONFIG_DIR:-$ENVS_DIR/$current/.claude}"
+    local _config_dir="$ENVS_DIR/$current/.claude"
     local _cj="$_config_dir/.claude.json"
-    [[ -f "$_cj" ]] || _cj="$HOME/.claude.json"
     if [[ -f "$_cj" ]]; then
         local _actual_uid
         _actual_uid=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('userID',''))" "$_cj" 2>/dev/null || true)
