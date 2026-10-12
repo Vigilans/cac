@@ -2126,10 +2126,15 @@ if [[ -n "$PROXY" ]]; then
 fi
 
 # inject env vars — proxy (only when proxy is configured)
+# socks5: consumed by the in-process hook (cac-dns-guard.js), never reaches children
 if [[ -n "$PROXY" ]]; then
     export _CAC_PROXY="$PROXY"
-    export HTTPS_PROXY="$PROXY" HTTP_PROXY="$PROXY" ALL_PROXY="$PROXY"
-    export NO_PROXY="localhost,127.0.0.1"
+    if [[ "$PROXY" == socks5://* ]]; then
+        export CAC_SOCKS_PROXY="$PROXY"
+    else
+        export NO_PROXY="localhost,127.0.0.1"
+        export HTTPS_PROXY="$PROXY" HTTP_PROXY="$PROXY" ALL_PROXY="$PROXY"
+    fi
 fi
 export PATH="$CAC_DIR/shim-bin:$PATH"
 # BUN_OPTIONS accepts backslash-escaped paths.
@@ -2316,8 +2321,9 @@ fi
 # - Persists across sessions (no cleanup on exit)
 # - Restarted if proxy changes (relay.proxy mismatch)
 # - Stopped by: cac env activate (switch), cac self delete, or machine reboot
+# socks5 upstreams are handled by the in-process hook, no relay needed
 _relay_active=false
-if [[ -n "$PROXY" ]] && [[ -f "$CAC_DIR/relay.js" ]]; then
+if [[ -n "$PROXY" ]] && [[ "$PROXY" != socks5://* ]] && [[ -f "$CAC_DIR/relay.js" ]]; then
     _relay_js="$CAC_DIR/relay.js"
     _relay_pid_file="$CAC_DIR/relay.pid"
     _relay_port_file="$CAC_DIR/relay.port"
