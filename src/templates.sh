@@ -209,6 +209,51 @@ json.dump(m(b,o),open(sys.argv[3],'w'),indent=2,ensure_ascii=False)
             fi
         fi
     fi
+    if [[ -f "$_env_dir/clone_source" ]]; then
+        python3 - "$_env_dir/clone_source" "$CLAUDE_CONFIG_DIR/.claude.json" << 'MCP_EOF'
+import json, os, re, stat, sys, tempfile
+from pathlib import Path
+
+source = Path(Path(sys.argv[1]).read_text().strip())
+source = Path.home() / ".claude.json" if source == Path.home() / ".claude" else source / ".claude.json"
+target = Path(sys.argv[2])
+servers = []
+for path in (source, target):
+    try:
+        text = path.read_bytes().decode("utf-8") if path.exists() else "{}"
+        data = json.loads(text.lstrip("\ufeff"))
+        if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
+            raise ValueError("mcpServers must be an object")
+        servers.append(data.get("mcpServers", {}))
+    except (OSError, ValueError) as error:
+        sys.exit(f"[cac] Cannot read MCP config {path}: {error}")
+if target.exists() and "mcpServers" in data and servers[0] == servers[1]:
+    sys.exit(0)
+decoder = json.JSONDecoder()
+newline = "\r\n" if "\r\n" in text else "\n"
+replacement = json.dumps(servers[0], ensure_ascii=False, indent=2).replace("\n", newline + "  ")
+start = end = text.index("{") + 1
+if "mcpServers" in data:
+    while True:
+        start += re.match(r"\s*", text[start:]).end()
+        key, start = decoder.raw_decode(text, start)
+        start += re.match(r"\s*:\s*", text[start:]).end()
+        _, end = decoder.raw_decode(text, start)
+        if key == "mcpServers": break
+        start = end + re.match(r"\s*,\s*", text[end:]).end()
+else:
+    replacement = f'{newline}  "mcpServers": {replacement}' + ("," if data else newline)
+mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o600
+fd, temporary = tempfile.mkstemp(prefix=".claude.json.", dir=target.parent)
+try:
+    with os.fdopen(fd, "wb") as output:
+        os.fchmod(output.fileno(), mode)
+        output.write((text[:start] + replacement + text[end:]).encode("utf-8"))
+    os.replace(temporary, target)
+finally:
+    if os.path.exists(temporary): os.unlink(temporary)
+MCP_EOF
+    fi
 fi
 
 # Proxy — optional: only if proxy file exists and is non-empty
